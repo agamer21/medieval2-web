@@ -21,6 +21,7 @@ The expected installation is `C:\Program Files (x86)\Steam\steamapps\common\Medi
 - Original idle, walk and run animation records plus spear/shield attachment rigs are decoded. Quaternion interpolation and skinning are new code; playback is interpreted at 20 fps and has not been compared with the native engine.
 - Direct folder mode indexes 36,159 members in six original archives using about 3.87 MB of archive metadata. It reads selected compressed blocks and animation-record ranges, rather than loading whole gigabyte archives into memory. The direct archive decoder matched the official unpacker byte-for-byte on 20 files.
 - Model variants, wireframe/normals, orbit/zoom/WASD camera, pause/resume and file loading.
+- Original unit-definition fields for Spear Militia are read from the selected installation and displayed as raw source values. Attack, armour and morale rules are not simulated.
 - A rendering experiment draws 1, 16, 64 or 256 copies. All copies share a pose. Right-click movement is prototype formation translation; it is not native pathfinding or combat.
 - The floor, lighting, camera, browser UI and movement logic are new. They do not establish visual or behavioral parity with Medieval II.
 
