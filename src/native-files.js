@@ -2,22 +2,29 @@ import {parseAnimation} from './animation.js';
 import {cleanPath} from './pack.js';
 
 export function catalogueFromModeldb(text) {
-  const match=/(?:^|\s)13 spear_militia(?=\s)/i.exec(text);
-  if(!match)throw new Error('The model database has no supported spear-militia entry');
-  let at=match.index+match[0].length;
-  const number=()=>{const token=/^\s*([-+\d.eE]+)/.exec(text.slice(at));if(!token)throw new Error('Invalid model database number');at+=token[0].length;const n=Number(token[1]);if(!Number.isFinite(n))throw new Error('Invalid model database value');return n;};
-  const count=()=>{const n=number();if(!Number.isSafeInteger(n)||n<0||n>10000)throw new Error('Invalid model database count');return n;};
-  const string=()=>{const n=count();if(/\s/.test(text[at]??''))at++;if(at+n>text.length)throw new Error('Truncated model database string');const value=text.slice(at,at+n);at+=n;return value;};
-  const models=[];for(let set=0,sets=count();set<sets;set++)for(let lod=0,lods=count();lod<lods;lod++){models.push(string());number();}
-  const tables=[];
-  for(let table=0;table<2;table++){const factions=new Map();for(let i=0,n=count();i<n;i++){const faction=string();factions.set(faction,[string(),string(),string()]);}tables.push(factions);}
-  const entries=[];
-  for(const faction of ['england','france']){
-    if(!tables[0].has(faction)||!tables[1].has(faction))continue;
-    entries.push({id:`spear-militia-${faction}`,name:'Spear Militia',faction:faction[0].toUpperCase()+faction.slice(1),mesh:'/assets/data/'+cleanPath(models[0]),main:'/assets/data/'+cleanPath(tables[0].get(faction)[0]),attachment:'/assets/data/'+cleanPath(tables[1].get(faction)[0])});
+  if(text.length>64*1024*1024)throw new Error('Model database exceeds the 64 MiB limit');
+  const candidates=/(?<!\S)(\d+)\s+([a-z][a-z0-9_]*)(?=\s)/ig,records=new Map();let match;
+  const title=value=>value.split('_').map(word=>word?word[0].toUpperCase()+word.slice(1):'').join(' ');
+  while((match=candidates.exec(text))&&records.size<10000){
+    let at=candidates.lastIndex;
+    const number=()=>{const token=/^\s*([-+\d.eE]+)/.exec(text.slice(at));if(!token)throw new Error('bad number');at+=token[0].length;const n=Number(token[1]);if(!Number.isFinite(n))throw new Error('bad value');return n;};
+    const count=max=>{const n=number();if(!Number.isSafeInteger(n)||n<0||n>max)throw new Error('bad count');return n;};
+    const string=()=>{const n=count(8192);if(/\s/.test(text[at]??''))at++;if(at+n>text.length)throw new Error('truncated string');const value=text.slice(at,at+n);at+=n;return value;};
+    try{
+      const sets=count(128);if(!sets)continue;const models=[];
+      for(let set=0;set<sets;set++){const lods=count(64);if(!lods)throw new Error('empty LOD set');for(let lod=0;lod<lods;lod++){const path=string();number();if(!/^unit_models\/.+\.mesh$/i.test(path)||path.includes('..'))throw new Error('invalid model path');models.push(path);}}
+      const tables=[];
+      for(let table=0;table<2;table++){const factions=new Map(),n=count(256);for(let i=0;i<n;i++){const faction=string(),values=[string(),string(),string()];if(!/^[a-z][a-z0-9_]*$/i.test(faction))throw new Error('invalid faction');factions.set(faction.toLowerCase(),values);}tables.push(factions);}
+      if(!tables[0].size||!tables[1].size)continue;
+      const id=match[1],name=match[2].toLowerCase();
+      for(const [faction,main] of tables[0]){
+        const attachment=tables[1].get(faction);if(!attachment||!main[0].toLowerCase().endsWith('.texture')||!attachment[0].toLowerCase().endsWith('.texture'))continue;
+        const mesh=models[0],key=`${id}-${name}-${faction}`;
+        records.set(key,{id:key,name:title(name),faction:title(faction),mesh:'/assets/data/'+cleanPath(mesh),main:'/assets/data/'+cleanPath(main[0]),attachment:'/assets/data/'+cleanPath(attachment[0]),modeldbName:name,modeldbId:id,lods:models.map(path=>'/assets/data/'+cleanPath(path))});
+      }
+    }catch{}
   }
-  if(!entries.length)throw new Error('The selected game has no supported sample faction textures');
-  return entries;
+  const entries=[...records.values()];if(!entries.length)throw new Error('The model database has no supported model entries');return entries;
 }
 
 export function parseAnimationIndex(input) {

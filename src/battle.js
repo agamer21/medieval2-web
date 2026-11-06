@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {OrbitControls} from '../vendor/three/OrbitControls.js';
 import {createBattle,stepBattle,select,command,rally,TYPES,living,fighting} from './battle-sim.js';
+import {loadLocalBattleAssets} from './battle-assets.js';
 const $=id=>document.getElementById(id),canvas=$('battle-canvas'),host=$('battlefield');
 let renderer;
 try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});}catch(e){$('loading-error').hidden=false;throw e;}
@@ -9,7 +10,7 @@ renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.
 const scene=new THREE.Scene();scene.background=new THREE.Color('#aab8ab');scene.fog=new THREE.Fog('#aab8ab',130,265);
 const camera=new THREE.PerspectiveCamera(43,1,.1,500);camera.position.set(48,70,85);
 const controls=new OrbitControls(camera,canvas);controls.target.set(0,0,3);controls.enableDamping=true;controls.dampingFactor=.09;controls.maxPolarAngle=1.25;controls.minPolarAngle=.3;controls.minDistance=22;controls.maxDistance=160;controls.mouseButtons={LEFT:THREE.MOUSE.ROTATE,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:null};controls.update();
-function frameBattle(){const compact=host.clientWidth<600;camera.fov=compact?54:43;controls.maxDistance=compact?220:160;camera.position.set(...(compact?[12,122,114]:[48,70,85]));controls.target.set(0,0,3);camera.updateProjectionMatrix();controls.update();}
+function frameBattle(){const compact=host.clientWidth<600;camera.fov=compact?62:43;controls.maxDistance=compact?220:160;camera.position.set(...(compact?[12,122,114]:[48,70,85]));controls.target.set(0,0,compact?20:3);camera.updateProjectionMatrix();controls.update();}
 scene.add(new THREE.HemisphereLight('#f8f2d6','#66744d',2.8));
 const sun=new THREE.DirectionalLight('#fff0cf',3.3);sun.position.set(-45,75,30);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-70,right:70,top:70,bottom:-70,near:1,far:180});sun.shadow.bias=-.0005;sun.shadow.normalBias=.04;scene.add(sun);
 const mat=(color,extra={})=>new THREE.MeshStandardMaterial({color,roughness:.88,...extra});
@@ -48,13 +49,25 @@ function createViews(){
  }
 }
 createViews();
+let originalBattleModels=false;
+async function loadOriginalBattleModels(){
+ try{
+  document.querySelector('header .prototype').textContent='CHECKING LOCAL MODELS…';const assets=await loadLocalBattleAssets(renderer);if(!assets){document.querySelector('header .prototype').textContent='PLAYABLE PROTOTYPE';return;}let loaded=0;
+  for(const s of battle.squads){const asset=assets.bySquad.get(s.id);if(!asset)continue;const view=views[s.id],root=new THREE.Group(),instances=[],horse=s.type==='horse',height=asset.height||1,scale=(horse?2.35:1.8)/height,spacingX=horse?1.85:1.4,spacingZ=horse?2.2:1.7;
+   for(const part of asset.parts){const mesh=new THREE.InstancedMesh(part.geometry,part.material,24);mesh.name=`original/${s.name}/${part.name}`;mesh.castShadow=true;mesh.receiveShadow=true;mesh.frustumCulled=false;for(let i=0;i<24;i++){const x=(i%6-2.5)*spacingX,z=(Math.floor(i/6)-1.5)*spacingZ;dummy.position.set(x,-asset.minimumY*scale,z);dummy.rotation.set(0,0,0);dummy.scale.setScalar(scale);dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);}mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();root.add(mesh);instances.push(mesh);}
+   root.position.set(s.x,0,s.z);root.rotation.y=s.angle;scene.add(root);view.originalRoot=root;view.originalMeshes=instances;for(const part of Object.values(view.parts))part.visible=false;loaded++;
+  }
+  originalBattleModels=loaded===battle.squads.length;if(originalBattleModels)document.querySelector('header .prototype').textContent=`${assets.modelCount} REAL UNIT TYPES · LOCAL`;
+ }catch(error){document.querySelector('header .prototype').textContent='PROCEDURAL FALLBACK';$('message').textContent=`Original models could not be loaded: ${error.message}`;}
+}
+loadOriginalBattleModels();
 function setPart(part,index,x,y,z,rx=0,ry=0,rz=0){dummy.position.set(x,y,z);dummy.rotation.set(rx,ry,rz);dummy.scale.set(1,1,1);dummy.updateMatrix();part.setMatrixAt(index,dummy.matrix);}
 function pose(t){
  for(const s of battle.squads){const view=views[s.id],active=living(s);view.angle+=Math.atan2(Math.sin(s.angle-view.angle),Math.cos(s.angle-view.angle))*.12;const a=view.angle,sn=Math.sin(a),cs=Math.cos(a);
   const put=(part,i,x,y,z,rx=0,rz=0)=>setPart(part,i,s.x+x*cs+z*sn,y,s.z-x*sn+z*cs,rx,a,rz);
   for(const part of Object.values(view.parts)){part.count=active?s.count:0;}
-  if(view.cavalry)view.parts.leg.count=active?s.count*4:0;
-  if(view.cavalry){for(let i=0;i<s.count&&active;i++){
+  if(view.originalRoot){view.originalRoot.position.set(s.x,0,s.z);view.originalRoot.rotation.y=a;view.originalRoot.visible=active;for(const part of view.originalMeshes)part.count=active?s.count:0;}
+  else if(view.cavalry){view.parts.leg.count=active?s.count*4:0;for(let i=0;i<s.count&&active;i++){
    const x=(i%6-2.5)*2.3,z=(Math.floor(i/6)-1.5)*3,phase=t*(s.running?11:8)+i*1.3,bob=s.moving?Math.abs(Math.cos(phase))*.09:Math.sin(t*2+i)*.014;
    put(view.parts.horseBody,i,x,1.05+bob,z);put(view.parts.horseHead,i,x,1.5+bob,z+1.05,s.moving?Math.sin(phase)*.12:0);
    for(let k=0;k<4;k++){const lx=k%2?.27:-.27,lz=k<2?.62:-.62,swing=s.moving?Math.sin(phase+(k%2?Math.PI:0)+(k<2?0:Math.PI/2))*.5:0;setPart(view.parts.leg,i*4+k,s.x+(x+lx)*cs+(z+lz)*sn,.42,s.z-(x+lx)*sn+(z+lz)*cs,swing,a,0);}
@@ -148,5 +161,5 @@ function animate(now){
  pose(battle.time);hudElapsed+=dt;if(hudElapsed>.12){hud();hudElapsed=0;}controls.update();renderer.render(scene,camera);
 }
 // Read-only inspection hooks for browser verification; no artificial victory button.
-window.battleGame={get state(){return battle;},renderer,camera,controls,screenPosition(id){const s=battle.squads[id],r=canvas.getBoundingClientRect();const point=new THREE.Vector3(s.x,1,s.z).project(camera);return {x:r.left+(point.x+1)*r.width/2,y:r.top+(1-point.y)*r.height/2};},worldPosition(x,z){const r=canvas.getBoundingClientRect(),p=new THREE.Vector3(x,0,z).project(camera);return {x:r.left+(p.x+1)*r.width/2,y:r.top+(1-p.y)*r.height/2};},get audioState(){return audio?.state??'off';}};
+window.battleGame={get state(){return battle;},get originalModelsLoaded(){return originalBattleModels;},renderer,camera,controls,screenPosition(id){const s=battle.squads[id],r=canvas.getBoundingClientRect();const point=new THREE.Vector3(s.x,1,s.z).project(camera);return {x:r.left+(point.x+1)*r.width/2,y:r.top+(1-point.y)*r.height/2};},worldPosition(x,z){const r=canvas.getBoundingClientRect(),p=new THREE.Vector3(x,0,z).project(camera);return {x:r.left+(p.x+1)*r.width/2,y:r.top+(1-p.y)*r.height/2};},get audioState(){return audio?.state??'off';}};
 hud();requestAnimationFrame(animate);

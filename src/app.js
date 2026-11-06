@@ -3,7 +3,7 @@ import {OrbitControls} from '../vendor/three/OrbitControls.js';
 import {parseMesh} from './mesh.js';
 import {decodeTexture,textureAtlas} from './texture.js';
 import {parseAnimation,NativeRig,makeSkinMap,skinVertices} from './animation.js';
-import {openGameFiles} from './pack.js';
+import {openGameFiles,openRemoteGameFiles} from './pack.js';
 import {catalogueFromModeldb,nativeLibraryFromGame} from './native-files.js';
 import {parseUnitDefinitions,findSpearMilitia} from './units.js';
 const $=id=>document.getElementById(id),canvas=$('scene'),host=canvas.parentElement;
@@ -102,8 +102,18 @@ function updateLibraryOptions(){
   for(const entry of library?.clips.values()??[]){const option=document.createElement('option');option.value=entry.id;option.textContent=entry.name;$('animation').append(option);}
   if(previous==='bind'||library?.clips.has(previous))$('animation').value=previous;
 }
-function updateEntryOptions(){
-  $('unit-select').replaceChildren();if(!entries.length){const empty=document.createElement('option');empty.textContent='Choose your game folder first';$('unit-select').append(empty);}for(const entry of entries){const option=document.createElement('option');option.value=entry.id;option.textContent=`${entry.name} · ${entry.faction}`;$('unit-select').append(option);}
+function updateEntryOptions(selectedId=null){
+  const query=$('unit-search').value.trim().toLowerCase(),previous=selectedId??$('unit-select').value,matching=entries.filter(entry=>!query||`${entry.name} ${entry.faction}`.toLowerCase().includes(query)),visible=matching.slice(0,300);
+  if(previous&&matching.some(entry=>entry.id===previous)&&!visible.some(entry=>entry.id===previous))visible.unshift(matching.find(entry=>entry.id===previous));
+  $('entry-count').textContent=`${entries.length.toLocaleString()} original model/faction entries · ${query?`${matching.length.toLocaleString()} matches`:'type to search'}`;
+  $('unit-select').replaceChildren();if(!visible.length){const empty=document.createElement('option');empty.textContent=entries.length?'No matching models':'Choose your game folder first';$('unit-select').append(empty);return;}
+  for(const entry of visible){const option=document.createElement('option');option.value=entry.id;option.textContent=`${entry.name} · ${entry.faction}`;$('unit-select').append(option);}
+  if(matching.length>visible.length){const more=document.createElement('option');more.disabled=true;more.textContent=`… ${matching.length-visible.length} more — narrow your search`;$('unit-select').append(more);}
+  if(previous&&visible.some(entry=>entry.id===previous))$('unit-select').value=previous;
+}
+function updateLodOptions(entry){
+  const paths=entry.lods?.length?entry.lods:[entry.mesh],selector=$('lod');selector.replaceChildren();
+  paths.forEach((path,index)=>{const option=document.createElement('option');option.value=String(index);option.textContent=`LOD ${index} · ${path.split('/').pop()}`;selector.append(option);});selector.disabled=paths.length<2;
 }
 function showNativeDefinition(){
   const definition=nativeUnitDefinition;$('native-definition').hidden=!definition;if(!definition)return;
@@ -121,21 +131,23 @@ $('game-folder').addEventListener('change',async e=>{
     const newEntries=catalogueFromModeldb(db),newLibrary=await nativeLibraryFromGame(reader);
     const definitions=parseUnitDefinitions(new TextDecoder('windows-1252').decode(await reader.read('data/export_descr_unit.txt')));if(epoch!==loadEpoch)return;
     nativeUnitDefinition=findSpearMilitia(definitions);showNativeDefinition();
-    selectedFiles=reader;library=newLibrary;entries=newEntries;updateLibraryOptions();updateEntryOptions();
+    selectedFiles=reader;library=newLibrary;entries=newEntries;state.modelCatalogueCount=entries.length;updateLibraryOptions();const initial=entries.find(e=>e.modeldbName==='spear_militia'&&e.faction==='England')??entries[0];updateEntryOptions(initial?.id);if(initial)updateLodOptions(initial);
     state.sourceKind='browser-selected game files';state.archiveMembers=reader.memberCount;state.archiveMetadataBytes=reader.metadataBytes;
-    await loadEntry(entries[0]);$('asset-note').textContent=`Read ${reader.packCount} archives directly. Files remain local; no extraction tool or upload.`;
+    await loadEntry(initial);$('asset-note').textContent=`Read ${reader.packCount} archives directly. Files remain local; no extraction tool or upload.`;
   }catch(error){if(epoch===loadEpoch)status(error.message,true);}
 });
 async function loadEntry(entry){
   const epoch=++loadEpoch;state.ready=false;status('Decoding original model and textures…');
   try{
-    const [geometry,main,attachment]=await Promise.all([getBytes(entry.mesh),getBytes(entry.main),getBytes(entry.attachment)]);
+    const meshPath=entry.lods?.[Number($('lod').value)]??entry.mesh,[geometry,main,attachment]=await Promise.all([getBytes(meshPath),getBytes(entry.main),getBytes(entry.attachment)]);
     if(epoch!==loadEpoch)return;const decodedMain=decodeTexture(main),decodedAttachment=decodeTexture(attachment);
-    mainImage=decodedMain;attachmentImage=decodedAttachment;supportsNative=entry.mesh.endsWith('/spear_militia_lod0.mesh');updateAtlas();installModel(geometry,`${entry.name} · ${entry.faction}`,entry.mesh.replace('/assets/',''));
+    mainImage=decodedMain;attachmentImage=decodedAttachment;supportsNative=entry.modeldbName==='spear_militia'||meshPath.endsWith('/spear_militia_lod0.mesh');updateAtlas();installModel(geometry,`${entry.name} · ${entry.faction}`,meshPath.replace('/assets/',''));
     $('asset-note').textContent='Original model + modeldb-matched faction textures. All local.';
   }catch(error){if(epoch!==loadEpoch)return;status(error.message,true);}
 }
-$('unit-select').addEventListener('change',e=>{const entry=entries.find(entry=>entry.id===e.target.value);if(entry)loadEntry(entry);});
+$('unit-search').addEventListener('input',()=>updateEntryOptions());
+$('unit-select').addEventListener('change',e=>{const entry=entries.find(entry=>entry.id===e.target.value);if(entry){updateLodOptions(entry);loadEntry(entry);}});
+$('lod').addEventListener('change',()=>{const entry=entries.find(entry=>entry.id===$('unit-select').value);if(entry)loadEntry(entry);});
 $('mesh-file').addEventListener('change',e=>{const file=e.target.files[0];if(file)openLocalModel(file);});
 for(const [id,kind] of [['main-texture','main'],['attachment-texture','attachment']])$(id).addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{const image=decodeTexture(await file.arrayBuffer());if(kind==='main')mainImage=image;else attachmentImage=image;updateAtlas();}catch(error){status(error.message,true);}});
 for(const id of ['variant','surface'])$(id).addEventListener('change',()=>rebuild());
@@ -169,11 +181,21 @@ renderer.setAnimationLoop(now=>{
 });
 async function initialize(){
   const epoch=loadEpoch;
+  try{const response=await fetch('./api/game',{cache:'no-store'});if(response.ok){const game=await response.json();if(game.available){
+    status('Using the installed game files locally…');const reader=await openRemoteGameFiles(game,message=>{if(epoch===loadEpoch)status(message);});
+    const db=new TextDecoder('windows-1252').decode(await reader.read('data/unit_models/battle_models.modeldb'));
+    const newEntries=catalogueFromModeldb(db),newLibrary=await nativeLibraryFromGame(reader);
+    const definitions=parseUnitDefinitions(new TextDecoder('windows-1252').decode(await reader.read('data/export_descr_unit.txt')));if(epoch!==loadEpoch)return;
+    nativeUnitDefinition=findSpearMilitia(definitions);showNativeDefinition();selectedFiles=reader;library=newLibrary;entries=newEntries;state.modelCatalogueCount=entries.length;updateLibraryOptions();const initial=entries.find(e=>e.modeldbName==='spear_militia'&&e.faction==='England')??entries[0];updateEntryOptions(initial?.id);if(initial)updateLodOptions(initial);
+    state.sourceKind='auto-detected local Steam installation';state.archiveMembers=reader.memberCount;state.archiveMetadataBytes=reader.metadataBytes;
+    for(const element of [$('game-folder').closest('.file-button'),$('mesh-file').closest('.file-button'),$('main-texture').closest('details')]){element.hidden=true;element.style.display='none';}
+    await loadEntry(initial);$('asset-note').textContent=`Read ${reader.packCount} installed packs directly. Original files stay on this PC; nothing is uploaded.`;return;
+  }}}catch(error){if(epoch===loadEpoch)$('animation-note').textContent=`Local auto-detection unavailable: ${error.message}`;}
   try{const response=await fetch('./catalog.json');if(!response.ok)throw new Error('No local catalogue');const catalog=await response.json();let initialLibrary=null;
     if(catalog.animations)try{initialLibrary=await loadAnimationLibrary(catalog.animations);}catch(error){if(epoch===loadEpoch)$('animation-note').textContent='Animation data unavailable; bind-pose inspection still works.';}
-    if(epoch!==loadEpoch)return;library=initialLibrary;entries=catalog.entries??[];updateLibraryOptions();updateEntryOptions();
+    if(epoch!==loadEpoch)return;library=initialLibrary;entries=catalog.entries??[];state.modelCatalogueCount=entries.length;updateLibraryOptions();updateEntryOptions();
     if(entries.length)try{const data=await getBytes('/assets/data/export_descr_unit.txt');if(epoch!==loadEpoch)return;nativeUnitDefinition=findSpearMilitia(parseUnitDefinitions(new TextDecoder('windows-1252').decode(data)));showNativeDefinition();}catch{}
-    if(entries.length){$('unit-select').value=entries[0].id;await loadEntry(entries[0]);}
+    if(entries.length){$('unit-select').value=entries[0].id;updateLodOptions(entries[0]);await loadEntry(entries[0]);}
     else{status('Choose your installed game folder, or open a local .mesh.');fit();}
   }catch(error){if(epoch===loadEpoch){status('Choose your installed game folder, or open a local .mesh.');fit();}}
 }

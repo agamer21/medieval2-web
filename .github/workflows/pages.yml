@@ -26,7 +26,7 @@ jobs:
       - name: Prepare code-only site
         run: |
           mkdir site
-          cp index.html lab.html battle.css style.css hosted.css catalog.json site/
+          cp index.html lab.html menu.html battle.css style.css menu.css hosted.css catalog.json site/
           cp -R src vendor site/
           python3 - <<'PY'
           from pathlib import Path

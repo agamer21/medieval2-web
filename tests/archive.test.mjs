@@ -16,6 +16,12 @@ test('invalid model databases and animation indexes fail clearly',()=>{
  assert.throws(()=>parseAnimationIndex(new ArrayBuffer(20)),/Invalid animation index/);
  assert.throws(()=>parseSkeleton(new ArrayBuffer(2)),/truncated/);
 });
-if(fs.existsSync(privateRoot))test('modeldb selections match the privately prepared faction catalogue',()=>{
- const text=fs.readFileSync(path.join(privateRoot,'data/unit_models/battle_models.modeldb'),'latin1');const actual=catalogueFromModeldb(text);const expected=JSON.parse(fs.readFileSync(path.join(privateRoot,'catalog.json'),'utf8')).entries;assert.deepEqual(actual,expected);
+test('modeldb reader exposes every valid model record and faction entry',()=>{
+ const str=value=>`${value.length} ${value}`;
+ const text=`13 spear_militia 1 1 ${str('unit_models/spear_militia_lod0.mesh')} 100 1 ${str('england')} ${str('unit_models/spear.texture')} ${str('unit_models/spear_normal.texture')} ${str('unit_sprites/spear.spr')} 1 ${str('england')} ${str('unit_models/shield.texture')} ${str('unit_models/shield_normal.texture')} ${str('unit_sprites/shield.spr')}`;
+ const entries=catalogueFromModeldb(text);assert.equal(entries.length,1);assert.equal(entries[0].modeldbName,'spear_militia');assert.equal(entries[0].faction,'England');assert.match(entries[0].mesh,/spear_militia_lod0\.mesh$/);assert.equal(entries[0].lods.length,1);
+});
+if(fs.existsSync(privateRoot))test('installed model database yields a broad local model catalogue',()=>{
+ const text=fs.readFileSync(path.join(privateRoot,'data/unit_models/battle_models.modeldb'),'latin1'),actual=catalogueFromModeldb(text);const expected=JSON.parse(fs.readFileSync(path.join(privateRoot,'catalog.json'),'utf8')).entries;
+ assert(actual.length>expected.length);assert(actual.some(e=>e.modeldbName==='spear_militia'&&e.faction==='England'));assert(actual.every(e=>e.mesh.startsWith('/assets/data/unit_models/')&&e.main.endsWith('.texture')));assert.equal(new Set(actual.map(e=>e.id)).size,actual.length);
 });

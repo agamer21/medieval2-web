@@ -30,16 +30,37 @@ export async function openPack(source) {
   async function extract(name){
     const entry=entries.get(cleanPath(name));if(!entry)throw new Error(`Archive does not contain ${name}`);
     if(entry.size>MAX_EXTRACT)throw new Error('Selected asset exceeds the 64 MiB decoding limit');
-    const out=new Uint8Array(entry.size);let cursor=entry.offset,written=0;
+    const packedBytes=exactBytes(await source.read(entry.offset,entry.packed),entry.packed),out=new Uint8Array(entry.size);let packedAt=0,written=0;
     for(let block=0;block<entry.blocks;block++){
       const stored=blockSizes[entry.firstBlock+block],wanted=Math.min(CHUNK,entry.size-written);
-      const input=exactBytes(await source.read(cursor,stored),stored);
+      const input=packedBytes.subarray(packedAt,packedAt+stored);packedAt+=stored;
       const data=stored===wanted?input:lzo1xDecompress(input,wanted);
-      if(data.length!==wanted)throw new Error('Decoded archive block has the wrong length');out.set(data,written);written+=data.length;cursor+=stored;
+      if(data.length!==wanted)throw new Error('Decoded archive block has the wrong length');out.set(data,written);written+=data.length;
     }
     return out.buffer;
   }
   return {entries,extract,indexBytes:total,fileCount:count};
+}
+
+function rangeSource(url,size){
+  return {size,read:async(offset,length)=>{
+    if(!Number.isSafeInteger(offset)||!Number.isSafeInteger(length)||offset<0||length<0||offset+length>size)throw new Error('Invalid game-file range');
+    const response=await fetch(url,{headers:{Range:`bytes=${offset}-${offset+length-1}`}});
+    if(response.status!==206)throw new Error(`Local game range failed (HTTP ${response.status})`);
+    return exactBytes(new Uint8Array(await response.arrayBuffer()),length);
+  }};
+}
+function gameReader(readers,looseRead,looseRange){
+  const lookup=new Map();let metadataBytes=0;
+  for(const pack of readers){metadataBytes+=pack.indexBytes;for(const name of pack.entries.keys())lookup.set(name,pack);}
+  const cache=new Map();
+  async function read(path){const name=cleanPath(path.replace(/^\/assets\//,''));if(cache.has(name))return cache.get(name);let bytes;
+    bytes=await looseRead(name);
+    if(bytes===undefined){const pack=lookup.get(name);if(!pack)throw new Error(`Missing original asset ${name}`);bytes=await pack.extract(name);}
+    cache.set(name,bytes);return bytes;
+  }
+  async function range(path,offset,length){return looseRange(cleanPath(path),offset,length);}
+  return {read,range,metadataBytes,packCount:readers.length,memberCount:lookup.size};
 }
 
 export async function openGameFiles(files,onProgress=()=>{}) {
@@ -47,16 +68,20 @@ export async function openGameFiles(files,onProgress=()=>{}) {
   for(const file of files){let path=cleanPath(file.webkitRelativePath||file.name);if(file.webkitRelativePath)path=path.split('/').slice(1).join('/');loose.set(path,file);}
   const packed=[...loose].filter(([name])=>/^packs\/[^/]+\.pack$/.test(name)).sort(([a],[b])=>a.localeCompare(b));
   if(!packed.length)throw new Error('Choose the Medieval II installation folder containing packs/.');
-  const readers=[];const lookup=new Map();let metadataBytes=0;
-  for(const [name,file] of packed){onProgress(`Reading ${name} (${readers.length+1}/${packed.length})…`);const pack=await openPack(blobSource(file));readers.push(pack);metadataBytes+=pack.indexBytes;for(const name of pack.entries.keys())lookup.set(name,pack);}
-  const cache=new Map();
-  async function read(path){const name=cleanPath(path.replace(/^\/assets\//,''));
-    if(cache.has(name))return cache.get(name);
-    let bytes;
-    if(loose.has(name)){const file=loose.get(name);if(file.size>MAX_EXTRACT)throw new Error('Asset too large; use a range read for animation DAT files');bytes=await file.arrayBuffer();}
-    else{const pack=lookup.get(name);if(!pack)throw new Error(`Missing original asset ${name}`);bytes=await pack.extract(name);}
-    cache.set(name,bytes);return bytes;
-  }
-  async function range(path,offset,length){const file=loose.get(cleanPath(path));if(!file)throw new Error(`Missing ${path}`);if(offset<0||length<0||offset+length>file.size||length>MAX_EXTRACT)throw new Error('Invalid file range');return file.slice(offset,offset+length).arrayBuffer();}
-  return {read,range,metadataBytes,packCount:readers.length,memberCount:lookup.size};
+  const readers=[];
+  for(const [name,file] of packed){onProgress(`Reading ${name} (${readers.length+1}/${packed.length})…`);readers.push(await openPack(blobSource(file)));}
+  const looseRead=async name=>{const file=loose.get(name);if(!file)return undefined;if(file.size>MAX_EXTRACT)throw new Error('Asset too large; use a range read for animation DAT files');return file.arrayBuffer();};
+  const looseRange=async(path,offset,length)=>{const file=loose.get(path);if(!file)throw new Error(`Missing ${path}`);if(offset<0||length<0||offset+length>file.size||length>MAX_EXTRACT)throw new Error('Invalid file range');return file.slice(offset,offset+length).arrayBuffer();};
+  return gameReader(readers,looseRead,looseRange);
+}
+
+export async function openRemoteGameFiles(manifest,onProgress=()=>{}){
+  if(!manifest?.available||!Array.isArray(manifest.packs)||manifest.packs.length===0||manifest.packs.length>64)throw new Error('No installed game packs were detected');
+  const readers=[];
+  for(const file of manifest.packs){onProgress(`Indexing ${file.name} (${readers.length+1}/${manifest.packs.length})…`);readers.push(await openPack(rangeSource(file.url,file.size)));}
+  const loose=new Map(Object.entries(manifest.loose??{}));
+  const readRange=async(path,offset,length)=>{const file=loose.get(path);if(!file)throw new Error(`Missing ${path}`);return rangeSource(file.url,file.size).read(offset,length);};
+  const looseRead=async path=>{if(!loose.has(path))return undefined;const file=loose.get(path);if(file.size>MAX_EXTRACT)throw new Error('Asset too large; use a range read for animation DAT files');return readRange(path,0,file.size).then(bytes=>bytes.buffer);};
+  const looseRange=async(path,offset,length)=>readRange(path,offset,length).then(bytes=>bytes.buffer);
+  return gameReader(readers,looseRead,looseRange);
 }
