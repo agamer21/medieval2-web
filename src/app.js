@@ -5,6 +5,7 @@ import {decodeTexture,textureAtlas} from './texture.js';
 import {parseAnimation,NativeRig,makeSkinMap,skinVertices} from './animation.js';
 import {openGameFiles} from './pack.js';
 import {catalogueFromModeldb,nativeLibraryFromGame} from './native-files.js';
+import {parseUnitDefinitions,findSpearMilitia} from './units.js';
 const $=id=>document.getElementById(id),canvas=$('scene'),host=canvas.parentElement;
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -22,6 +23,7 @@ let model=null,atlas=null,mainImage=null,attachmentImage=null,meshes=[],chosen=[
 let library=null,rig=null,extraRigs=[],skinMap=null,skinPositions=null,skinNormals=null,animationTime=0,playing=true,supportsNative=false;
 let selectedFiles=null;
 let animationSelectionTouched=false;
+let nativeUnitDefinition=null;
 const target=new THREE.Vector3(),keys=new Set(),raycaster=new THREE.Raycaster();
 const state={ready:false,vertices:0,bones:0,triangles:0,copies:1,renderFrames:0,modelName:'',lastError:null,target:[0,0,0],sourceKind:'original asset',animation:'static bind pose',movement:'prototype formation translation'};
 window.assetLab={state,renderer,scene,camera,controls,parseMesh};
@@ -103,12 +105,22 @@ function updateLibraryOptions(){
 function updateEntryOptions(){
   $('unit-select').replaceChildren();if(!entries.length){const empty=document.createElement('option');empty.textContent='Choose your game folder first';$('unit-select').append(empty);}for(const entry of entries){const option=document.createElement('option');option.value=entry.id;option.textContent=`${entry.name} · ${entry.faction}`;$('unit-select').append(option);}
 }
+function showNativeDefinition(){
+  const definition=nativeUnitDefinition;$('native-definition').hidden=!definition;if(!definition)return;
+  $('definition-name').textContent=definition.name;$('definition-fields').replaceChildren();
+  for(const [key,label] of [['soldier','Soldier field'],['stat_health','Health field'],['stat_pri','Primary attack field'],['stat_pri_armour','Armour / defence field'],['stat_mental','Morale field']]){
+    if(!definition.fields.has(key))continue;const row=document.createElement('div'),term=document.createElement('dt'),value=document.createElement('dd');term.textContent=label;value.textContent=definition.fields.get(key);value.style.overflowWrap='anywhere';row.append(term,value);$('definition-fields').append(row);
+  }
+  state.unitDefinitionLoaded=true;
+}
 $('game-folder').addEventListener('change',async e=>{
   if(!e.target.files.length)return;const epoch=++loadEpoch;status('Reading original game files locally…');
   try{
     const reader=await openGameFiles(e.target.files,message=>{if(epoch===loadEpoch)status(message);});
     const db=new TextDecoder('windows-1252').decode(await reader.read('data/unit_models/battle_models.modeldb'));
-    const newEntries=catalogueFromModeldb(db),newLibrary=await nativeLibraryFromGame(reader);if(epoch!==loadEpoch)return;
+    const newEntries=catalogueFromModeldb(db),newLibrary=await nativeLibraryFromGame(reader);
+    const definitions=parseUnitDefinitions(new TextDecoder('windows-1252').decode(await reader.read('data/export_descr_unit.txt')));if(epoch!==loadEpoch)return;
+    nativeUnitDefinition=findSpearMilitia(definitions);showNativeDefinition();
     selectedFiles=reader;library=newLibrary;entries=newEntries;updateLibraryOptions();updateEntryOptions();
     state.sourceKind='browser-selected game files';state.archiveMembers=reader.memberCount;state.archiveMetadataBytes=reader.metadataBytes;
     await loadEntry(entries[0]);$('asset-note').textContent=`Read ${reader.packCount} archives directly. Files remain local; no extraction tool or upload.`;
@@ -160,6 +172,7 @@ async function initialize(){
   try{const response=await fetch('./catalog.json');if(!response.ok)throw new Error('No local catalogue');const catalog=await response.json();let initialLibrary=null;
     if(catalog.animations)try{initialLibrary=await loadAnimationLibrary(catalog.animations);}catch(error){if(epoch===loadEpoch)$('animation-note').textContent='Animation data unavailable; bind-pose inspection still works.';}
     if(epoch!==loadEpoch)return;library=initialLibrary;entries=catalog.entries??[];updateLibraryOptions();updateEntryOptions();
+    if(entries.length)try{const data=await getBytes('/assets/data/export_descr_unit.txt');if(epoch!==loadEpoch)return;nativeUnitDefinition=findSpearMilitia(parseUnitDefinitions(new TextDecoder('windows-1252').decode(data)));showNativeDefinition();}catch{}
     if(entries.length){$('unit-select').value=entries[0].id;await loadEntry(entries[0]);}
     else{status('Choose your installed game folder, or open a local .mesh.');fit();}
   }catch(error){if(epoch===loadEpoch){status('Choose your installed game folder, or open a local .mesh.');fit();}}
