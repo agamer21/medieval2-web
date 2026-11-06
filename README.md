@@ -2,6 +2,8 @@
 
 A local research prototype that loads original Medieval II geometry, faction textures and selected animation records. It is **not a port of the original game engine**.
 
+Hosted prototype: <https://agamer21.github.io/medieval2-web/>. Source: <https://github.com/agamer21/medieval2-web>. Choose **Use installed game folder** to read your own copy directly. The hosted site contains code only. Its AG Arcade online badge uses anonymous Firebase presence; game files stay local.
+
 ## Open it on this PC
 
 Run `START.cmd`, then open <http://127.0.0.1:8872/>. The preparation work has already been completed in this workspace. If that address is already running, simply open it.
@@ -34,7 +36,7 @@ Screenshots and browser test scripts live in the containing workspace's `outputs
 
 ## Boundaries
 
-No game assets or original executable/DLLs are included in this code package. The private unpacker, samples and research references stay in `work/`. The local server binds only to `127.0.0.1`. Nothing has been published or uploaded. The original game has not been launched by this work.
+No game assets or original executable/DLLs are included in this code package or the public website/repository. The private unpacker, samples and research references stay in `work/`. The local server binds only to `127.0.0.1`. No original game files have been published or uploaded. The original game has not been launched by this work.
 
 Combat, campaign simulation, native AI, terrain/map decoding, original audio, collision/pathfinding, native save files and original UI/gameplay remain unimplemented.
 
