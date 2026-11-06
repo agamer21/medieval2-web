@@ -1,5 +1,7 @@
 # Dependencies and research provenance
 
+The default playable battle uses original procedural geometry, canvas-drawn labels/ground and synthesized Web Audio tones. No original game models, textures, animations, audio or decompiled code are shipped for that battle. Its simulation rules are new code. The native asset viewer is preserved separately at `lab.html`.
+
 - Three.js 0.187.0, from the official npm `three` package. Local `three.module.js`, `three.core.js` and `OrbitControls.js` are used. Three.js is MIT licensed; its license is included at `vendor/three/LICENSE`.
 - lzo1x 1.0.1, from the official npm package associated with [mbtech-nl/lzo1x](https://github.com/mbtech-nl/lzo1x). Its pure-JavaScript MIT-licensed decoder is used for original archive blocks. The package's license is included at `vendor/lzo1x/LICENSE`.
 - Original game models, textures, model database, animation packs and the shipped unpacker belong to their respective rights holders. They are read from the user's installation and kept outside this code package.
