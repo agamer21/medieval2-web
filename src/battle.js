@@ -13,7 +13,7 @@ function frameBattle(){const compact=host.clientWidth<600;camera.fov=compact?54:
 scene.add(new THREE.HemisphereLight('#f8f2d6','#66744d',2.8));
 const sun=new THREE.DirectionalLight('#fff0cf',3.3);sun.position.set(-45,75,30);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-70,right:70,top:70,bottom:-70,near:1,far:180});sun.shadow.bias=-.0005;sun.shadow.normalBias=.04;scene.add(sun);
 const mat=(color,extra={})=>new THREE.MeshStandardMaterial({color,roughness:.88,...extra});
-const materials={blue:mat('#315c77'),red:mat('#944b3b'),steel:mat('#a8aaa0',{metalness:.45,roughness:.5}),skin:mat('#c7a27c'),wood:mat('#66533b'),boots:mat('#3d4032'),bow:mat('#aa8958'),gold:mat('#d6ba78')};
+const materials={blue:mat('#315c77'),red:mat('#944b3b'),steel:mat('#a8aaa0',{metalness:.45,roughness:.5}),skin:mat('#c7a27c'),wood:mat('#66533b'),boots:mat('#3d4032'),bow:mat('#aa8958'),gold:mat('#d6ba78'),horse:mat('#5d4632'),horseDark:mat('#42321f')};
 function mesh(geometry,material,x,y,z,scale=null){const m=new THREE.Mesh(geometry,material);m.position.set(x,y,z);if(scale)m.scale.set(...scale);m.receiveShadow=true;scene.add(m);return m;}
 // All scenery and soldiers are authored procedurally; no original game data is fetched.
 let seed=127;function random(){seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;}
@@ -31,17 +31,20 @@ mesh(new THREE.BoxGeometry(26,7,3),stoneMat,-8,3.5,-73);
 for(const x of [-23,7]){mesh(new THREE.CylinderGeometry(3,3.8,13,8),stoneMat,x,6.5,-73).castShadow=true;mesh(new THREE.ConeGeometry(4,5,8),materials.red,x,15,-73);}
 const boundary=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-47,.03,-43),new THREE.Vector3(47,.03,-43),new THREE.Vector3(47,.03,43),new THREE.Vector3(-47,.03,43)]),new THREE.LineBasicMaterial({color:'#e0d6a3',transparent:true,opacity:.35}));scene.add(boundary);
 const ray=new THREE.Raycaster(),pointer=new THREE.Vector2(),dummy=new THREE.Object3D(),v=new THREE.Vector3();
-let battle=createBattle(),speed=1,elapsed=0,accumulator=0,lastFrame=performance.now(),hudElapsed=0,soundOn=false,audio=null,lastClash=0;
+let battle=createBattle(),speed=1,elapsed=0,accumulator=0,lastFrame=performance.now(),hudElapsed=0,soundOn=false,audio=null,lastClash=0,lastCharge=0;
 const views=[],projectiles=[],hitBoxes=[],keys=new Set();
-function instanced(geometry,material){const m=new THREE.InstancedMesh(geometry,material,24);m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;scene.add(m);return m;}
+function instanced(geometry,material,count=24){const m=new THREE.InstancedMesh(geometry,material,count);m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;scene.add(m);return m;}
 function makeLabel(){const c=document.createElement('canvas');c.width=512;c.height=112;const texture=new THREE.CanvasTexture(c);texture.colorSpace=THREE.SRGBColorSpace;const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:false,transparent:true}));sprite.scale.set(12,2.625,1);scene.add(sprite);return {c,texture,sprite,text:''};}
 function createViews(){
  for(const s of battle.squads){const cloth=s.side?materials.red:materials.blue;
-  const parts={body:instanced(new THREE.BoxGeometry(.68,.8,.4),cloth),head:instanced(new THREE.SphereGeometry(.23,7,5),materials.skin),helmet:instanced(new THREE.SphereGeometry(.28,7,5,0,Math.PI*2,0,Math.PI/2),materials.steel),leftLeg:instanced(new THREE.BoxGeometry(.2,.67,.22),materials.boots),rightLeg:instanced(new THREE.BoxGeometry(.2,.67,.22),materials.boots),arm:instanced(new THREE.BoxGeometry(.18,.65,.2),cloth),shield:instanced(new THREE.BoxGeometry(.6,.78,.1),cloth),weapon:instanced(s.type==='spear'?new THREE.CylinderGeometry(.035,.035,3.1,4):s.type==='bow'?new THREE.TorusGeometry(.43,.04,4,10,Math.PI):new THREE.BoxGeometry(.09,1.1,.07),s.type==='spear'?materials.wood:s.type==='bow'?materials.bow:materials.steel)};
-  const ring=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[-6,-3.8],[6,-3.8],[6,3.8],[-6,3.8]].map(([x,z])=>new THREE.Vector3(x,.045,z))),new THREE.LineBasicMaterial({color:'#efcf85',transparent:true,opacity:.9}));scene.add(ring);
+  const parts=s.type==='horse'
+   ?{horseBody:instanced(new THREE.BoxGeometry(.75,.8,1.8),materials.horse),horseHead:instanced(new THREE.BoxGeometry(.38,.42,.62),materials.horseDark),leg:instanced(new THREE.BoxGeometry(.16,.78,.16),materials.boots,96),body:instanced(new THREE.BoxGeometry(.6,.75,.38),cloth),head:instanced(new THREE.SphereGeometry(.22,7,5),materials.skin),helmet:instanced(new THREE.SphereGeometry(.27,7,5,0,Math.PI*2,0,Math.PI/2),materials.steel),arm:instanced(new THREE.BoxGeometry(.16,.6,.18),cloth),weapon:instanced(new THREE.CylinderGeometry(.04,.04,2.9,4),materials.wood)}
+   :{body:instanced(new THREE.BoxGeometry(.68,.8,.4),cloth),head:instanced(new THREE.SphereGeometry(.23,7,5),materials.skin),helmet:instanced(new THREE.SphereGeometry(.28,7,5,0,Math.PI*2,0,Math.PI/2),materials.steel),leftLeg:instanced(new THREE.BoxGeometry(.2,.67,.22),materials.boots),rightLeg:instanced(new THREE.BoxGeometry(.2,.67,.22),materials.boots),arm:instanced(new THREE.BoxGeometry(.18,.65,.2),cloth),shield:instanced(new THREE.BoxGeometry(.6,.78,.1),cloth),weapon:instanced(s.type==='spear'?new THREE.CylinderGeometry(.035,.035,3.1,4):s.type==='bow'?new THREE.TorusGeometry(.43,.04,4,10,Math.PI):new THREE.BoxGeometry(.09,1.1,.07),s.type==='spear'?materials.wood:s.type==='bow'?materials.bow:materials.steel)};
+  const cavalry=s.type==='horse';
+  const ring=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints((cavalry?[[-7,-5],[7,-5],[7,5],[-7,5]]:[[-6,-3.8],[6,-3.8],[6,3.8],[-6,3.8]]).map(([x,z])=>new THREE.Vector3(x,.045,z))),new THREE.LineBasicMaterial({color:'#efcf85',transparent:true,opacity:.9}));scene.add(ring);
   const pole=mesh(new THREE.CylinderGeometry(.06,.06,6,5),materials.wood,s.x,3,s.z),flag=mesh(new THREE.PlaneGeometry(2.4,1.5,5,2),cloth,s.x+1.2,5.2,s.z);flag.material=cloth.clone();flag.material.side=THREE.DoubleSide;flag.castShadow=true;
-  const box=new THREE.Mesh(new THREE.BoxGeometry(12,7,9),new THREE.MeshBasicMaterial({visible:false}));box.userData.squad=s.id;scene.add(box);hitBoxes.push(box);
-  views.push({parts,ring,pole,flag,box,label:makeLabel(),angle:s.angle});
+  const box=new THREE.Mesh(cavalry?new THREE.BoxGeometry(14,7,10):new THREE.BoxGeometry(12,7,9),new THREE.MeshBasicMaterial({visible:false}));box.userData.squad=s.id;scene.add(box);hitBoxes.push(box);
+  views.push({parts,ring,pole,flag,box,label:makeLabel(),angle:s.angle,cavalry});
  }
 }
 createViews();
@@ -50,7 +53,15 @@ function pose(t){
  for(const s of battle.squads){const view=views[s.id],active=living(s);view.angle+=Math.atan2(Math.sin(s.angle-view.angle),Math.cos(s.angle-view.angle))*.12;const a=view.angle,sn=Math.sin(a),cs=Math.cos(a);
   const put=(part,i,x,y,z,rx=0,rz=0)=>setPart(part,i,s.x+x*cs+z*sn,y,s.z-x*sn+z*cs,rx,a,rz);
   for(const part of Object.values(view.parts)){part.count=active?s.count:0;}
-  for(let i=0;i<s.count&&active;i++){
+  if(view.cavalry)view.parts.leg.count=active?s.count*4:0;
+  if(view.cavalry){for(let i=0;i<s.count&&active;i++){
+   const x=(i%6-2.5)*2.3,z=(Math.floor(i/6)-1.5)*3,phase=t*(s.running?11:8)+i*1.3,bob=s.moving?Math.abs(Math.cos(phase))*.09:Math.sin(t*2+i)*.014;
+   put(view.parts.horseBody,i,x,1.05+bob,z);put(view.parts.horseHead,i,x,1.5+bob,z+1.05,s.moving?Math.sin(phase)*.12:0);
+   for(let k=0;k<4;k++){const lx=k%2?.27:-.27,lz=k<2?.62:-.62,swing=s.moving?Math.sin(phase+(k%2?Math.PI:0)+(k<2?0:Math.PI/2))*.5:0;setPart(view.parts.leg,i*4+k,s.x+(x+lx)*cs+(z+lz)*sn,.42,s.z-(x+lx)*sn+(z+lz)*cs,swing,a,0);}
+   put(view.parts.body,i,x,1.95+bob,z);put(view.parts.head,i,x,2.6+bob,z);put(view.parts.helmet,i,x,2.68+bob,z);
+   const swing=s.engaged?Math.sin(t*8+i)*.7:0;
+   put(view.parts.arm,i,x+.42,2+bob,z,-swing-.35);put(view.parts.weapon,i,x+.5,2.1+bob,z+.75,s.engaged?1.3:1.12);
+  }}else for(let i=0;i<s.count&&active;i++){
    const x=(i%6-2.5)*1.65,z=(Math.floor(i/6)-1.5)*1.8,phase=t*(s.running?12:8)+i*1.7,walk=s.moving?Math.sin(phase)*.5:0,bob=s.moving?Math.abs(Math.cos(phase))*.06:Math.sin(t*2+i)*.014;
    put(view.parts.body,i,x,1.12+bob,z);put(view.parts.head,i,x,1.8+bob,z);put(view.parts.helmet,i,x,1.89+bob,z);
    put(view.parts.leftLeg,i,x-.18,.38,z+walk*.18,walk);put(view.parts.rightLeg,i,x+.18,.38,z-walk*.18,-walk);
@@ -75,6 +86,7 @@ function eventEffects(event){
  if(event.kind==='arrow'){
   const a=battle.squads[event.from],b=battle.squads[event.to];for(let i=0;i<5;i++){const start=new THREE.Vector3(a.x+(i-2)*1.5,1.9,a.z),end=new THREE.Vector3(b.x+(i-2)*1.2,1,b.z);const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([start,start.clone().add(new THREE.Vector3(0,0,1))]),new THREE.LineBasicMaterial({color:'#332b1d'}));scene.add(line);projectiles.push({line,start,end,life:0});}tone(820,.12,.018,'sine');
  }else if(event.kind==='clash'&&elapsed-lastClash>.15){lastClash=elapsed;tone(180+random()*160,.08,.025,'square');}
+ else if(event.kind==='charge'&&elapsed-lastCharge>1.2){lastCharge=elapsed;const s=battle.squads[event.from];message(s.side===0?`${s.name} charge!`:`${s.name} are charging your line!`);tone(95,.5,.05,'sawtooth');}
  else if(event.kind==='rout'){const s=battle.squads[event.from];message(`${s.name} is routing! ${s.side===0?'Use Rally if they still have enough troops.':'Press the attack.'}`);tone(140,.45,.035,'sawtooth');}
  else if(event.kind==='end')finish();
 }
@@ -93,13 +105,13 @@ function hud(){
  const cooldown=Math.max(0,Math.ceil(30-(battle.time-battle.rallyAt)));$('rally').textContent=cooldown?`Rally (${cooldown}s)`:'Rally troops';$('rally').disabled=battle.status!=='running'||cooldown>0;
 }
 function finish(){const win=battle.winner===0;$('result').hidden=false;$('result-title').textContent=battle.winner===null?'Draw':win?'Victory':'Defeat';$('result-kicker').textContent=win?'THE FIELD IS YOURS':'THE BANNERS FALL';$('result-description').textContent=win?'The red banners have broken. Your army holds the crossing.':'Your army has broken. Keep infantry together and protect your archers on the next attempt.';tone(win?520:150,.8,.06);hud();}
-function reset(){battle=createBattle($('difficulty').value);accumulator=0;keys.clear();$('result').hidden=true;marker.visible=false;for(const p of projectiles){scene.remove(p.line);p.line.geometry.dispose();p.line.material.dispose();}projectiles.length=0;message('Select your troops. Give orders. Begin when ready.');frameBattle();hud();}
+function reset(){battle=createBattle($('difficulty').value);accumulator=0;keys.clear();$('result').hidden=true;marker.visible=false;for(const p of projectiles){scene.remove(p.line);p.line.geometry.dispose();p.line.material.dispose();}projectiles.length=0;message('Place your regiments on your half of the field, then begin the battle.');frameBattle();hud();}
 function pause(){if(battle.status==='ended')return;const old=battle.status;battle.status=old==='running'?'paused':'running';accumulator=0;message(battle.status==='paused'?'Battle paused. You can still give orders.':old==='deployment'?'The red banners advance. Hold the crossing!':'Battle resumed.');tone(330,.25);hud();}
 $('pause').onclick=pause;$('restart').onclick=reset;$('play-again').onclick=reset;$('difficulty').onchange=()=>{reset();message('Challenge changed. A fresh battle is ready.');};
 $('speed').onclick=()=>{speed=speed===1?2:speed===2?.5:1;$('speed').textContent=`${speed}× speed`;};
 $('sound').onclick=()=>{soundOn=!soundOn;if(soundOn){audioStart();tone(440,.15);}$('sound').textContent=`Sound ${soundOn?'on':'off'}`;$('sound').setAttribute('aria-pressed',String(soundOn));};
 $('help-toggle').onclick=()=>{$('help').hidden=!$('help').hidden;$('help-toggle').setAttribute('aria-expanded',String(!$('help').hidden));};
-$('select-all').onclick=()=>{select(battle,[0,1,2]);hud();};$('hold').onclick=()=>{command(battle,{kind:'hold'});message('Selected regiments: hold position.');hud();};
+$('select-all').onclick=()=>{select(battle,battle.squads.filter(s=>s.side===0&&fighting(s)).map(s=>s.id));hud();};$('hold').onclick=()=>{command(battle,{kind:'hold'});message('Selected regiments: hold position.');hud();};
 $('run').onclick=()=>{const selected=battle.squads.filter(s=>battle.selected.includes(s.id));const enable=!selected.every(s=>s.running);for(const s of selected)s.running=enable;hud();};
 $('rally').onclick=()=>{if(rally(battle)){message('The horn sounds. Your regiments regain courage.');tone(260,.7,.06,'sawtooth');hud();}};
 canvas.addEventListener('contextmenu',e=>e.preventDefault());let down=null;
@@ -110,11 +122,17 @@ canvas.addEventListener('pointerup',e=>{
  if(e.button===0&&id!==undefined&&battle.squads[id].side===0){choose(id,e.shiftKey);return;}
  if(e.button!==2&&!touch)return;if(!battle.selected.length){message('Select a blue regiment first.');return;}
  if(id!==undefined&&battle.squads[id].side===1){command(battle,{kind:'attack',target:id});message(`Attack ${battle.squads[id].name}.`);tone(310,.12);}
- else{const point=ray.intersectObject(ground)[0]?.point;if(!point)return;command(battle,{kind:'move',x:point.x,z:point.z});const dest=battle.squads.find(s=>battle.selected.includes(s.id)&&fighting(s))?.order;if(dest?.kind==='move'){marker.position.set(dest.x,.06,dest.z);marker.visible=true;markerLife=2;message('Move order given.');tone(390,.1);}}
+ else{const point=ray.intersectObject(ground)[0]?.point;if(!point)return;
+  if(battle.status==='deployment'){const selected=battle.squads.filter(s=>battle.selected.includes(s.id)&&fighting(s));selected.forEach((s,i)=>{s.x=Math.max(-42,Math.min(42,point.x+(i-(selected.length-1)/2)*13));s.z=Math.max(8,Math.min(38,point.z));s.angle=Math.PI;s.order={kind:'hold'};s.chargeDistance=0;});marker.position.set(point.x,.06,point.z);marker.visible=true;markerLife=2;message('Deployment position set. Begin when ready.');tone(390,.1);hud();return;}
+  command(battle,{kind:'move',x:point.x,z:point.z});const dest=battle.squads.find(s=>battle.selected.includes(s.id)&&fighting(s))?.order;if(dest?.kind==='move'){marker.position.set(dest.x,.06,dest.z);marker.visible=true;markerLife=2;message('Move order given.');tone(390,.1);}}
  hud();
 });
-addEventListener('keydown',e=>{if(['INPUT','SELECT','BUTTON'].includes(document.activeElement?.tagName))return;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys.add(e.code);if(e.repeat)return;if(e.code==='Space')pause();if(e.code==='Digit1')$('select-all').click();if(e.code==='KeyH')$('hold').click();if(e.code==='KeyR'&&!$('rally').disabled)$('rally').click();});
-addEventListener('keyup',e=>keys.delete(e.code));addEventListener('blur',()=>{keys.clear();if(battle.status==='running'){battle.status='paused';accumulator=0;message('Battle paused while the window is away.');hud();}});
+const selectBox=document.createElement('div');selectBox.className='select-box';selectBox.hidden=true;host.append(selectBox);let boxStart=null;
+canvas.addEventListener('pointerdown',e=>{if(e.button!==0||!e.shiftKey||e.pointerType!=='mouse')return;const r=canvas.getBoundingClientRect();boxStart={x:e.clientX-r.left,y:e.clientY-r.top};Object.assign(selectBox.style,{left:boxStart.x+'px',top:boxStart.y+'px',width:'0px',height:'0px'});selectBox.hidden=false;});
+canvas.addEventListener('pointermove',e=>{if(!boxStart)return;const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;Object.assign(selectBox.style,{left:Math.min(x,boxStart.x)+'px',top:Math.min(y,boxStart.y)+'px',width:Math.abs(x-boxStart.x)+'px',height:Math.abs(y-boxStart.y)+'px'});});
+addEventListener('pointerup',e=>{if(!boxStart)return;const r=canvas.getBoundingClientRect(),x1=Math.min(e.clientX-r.left,boxStart.x),x2=Math.max(e.clientX-r.left,boxStart.x),y1=Math.min(e.clientY-r.top,boxStart.y),y2=Math.max(e.clientY-r.top,boxStart.y);boxStart=null;selectBox.hidden=true;if(x2-x1<6&&y2-y1<6)return;const hits=battle.squads.filter(s=>s.side===0&&fighting(s)).map(s=>{v.set(s.x,1,s.z).project(camera);return{id:s.id,x:(v.x+1)*r.width/2,y:(1-v.y)*r.height/2};}).filter(p=>p.x>=x1&&p.x<=x2&&p.y>=y1&&p.y<=y2).map(p=>p.id);if(hits.length){select(battle,[...new Set([...battle.selected,...hits])]);tone(420,.07,.025);message(`${hits.length} regiment${hits.length>1?'s':''} added to selection.`);hud();}});
+addEventListener('keydown',e=>{if(e.key==='Shift')controls.enabled=false;if(['INPUT','SELECT','BUTTON'].includes(document.activeElement?.tagName))return;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys.add(e.code);if(e.repeat)return;if(e.code==='Space')pause();if(e.code==='Digit1')$('select-all').click();if(e.code==='KeyH')$('hold').click();if(e.code==='KeyR'&&!$('rally').disabled)$('rally').click();});
+addEventListener('keyup',e=>{keys.delete(e.code);if(e.key==='Shift')controls.enabled=true;});addEventListener('blur',()=>{keys.clear();controls.enabled=true;boxStart=null;selectBox.hidden=true;if(battle.status==='running'){battle.status='paused';accumulator=0;message('Battle paused while the window is away.');hud();}});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&battle.status==='running'){battle.status='paused';accumulator=0;hud();}});
 let compactView=null;new ResizeObserver(()=>{const w=host.clientWidth,h=host.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;if(compactView!==(w<600)){compactView=w<600;frameBattle();}camera.updateProjectionMatrix();}).observe(host);
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();if(battle.status==='running')battle.status='paused';message('Graphics paused. Reload if the battlefield does not return.');hud();});
