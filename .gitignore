@@ -1,0 +1,9 @@
+node_modules/
+private-assets/
+*.mesh
+*.texture
+*.pack
+*.cas
+*.modeldb
+*.anim
+__pycache__/

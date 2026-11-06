@@ -1,0 +1,41 @@
+name: Publish Medieval II Asset Lab
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Test code-only format readers
+        run: node --test tests/*.test.mjs
+      - name: Prepare code-only site
+        run: |
+          mkdir site
+          cp index.html style.css hosted.css catalog.json site/
+          cp -R src vendor site/
+          python3 - <<'PY'
+          from pathlib import Path
+          forbidden = {'.mesh','.texture','.pack','.cas','.anim','.idx','.dat','.modeldb','.tga','.bik','.exe','.dll'}
+          assert not [p for p in Path('site').rglob('*') if p.suffix.lower() in forbidden]
+          PY
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

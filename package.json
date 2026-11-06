@@ -1,0 +1,7 @@
+{
+  "name": "medieval-ii-asset-lab",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node --test tests/*.test.mjs", "start": "python tools/server.py"},
+  "description": "Local, data-free Medieval II asset research prototype; not the original game engine"
+}
