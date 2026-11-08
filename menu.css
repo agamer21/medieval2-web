@@ -1,1 +1,15 @@
 *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#090a08}#menu-art{display:block;width:100%;height:100%;object-fit:fill}#menu-status{position:fixed;left:12px;bottom:12px;padding:8px 11px;background:#10150edb;border:1px solid #b7a168;color:#e9dfc2;font:11px Arial;letter-spacing:.08em}#play-fallback{position:fixed;right:12px;bottom:12px;padding:8px 11px;background:#10150edb;border:1px solid #b7a168;color:#e9dfc2;text-decoration:none;font:11px Arial}
+.prologue{height:100%;display:grid;place-items:center;color:#f4e6c2;font:18px Georgia,serif;background:#161b14}
+#prologue-art{position:absolute;width:100%;height:100%;object-fit:cover;opacity:.66}
+.briefing{position:relative;background:#151a12ed;border:1px solid #b29b60;padding:clamp(16px,4vw,42px);width:min(90vw,650px);text-align:center;border-radius:4px}
+.briefing h1{font-size:clamp(32px,6vw,54px);margin:.3em 0}
+.briefing-actions{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-top:24px}
+.briefing a,.briefing button,#intro a{font:inherit;color:#f4e6c2;background:#39432b;border:1px solid #c2aa70;border-radius:3px;padding:10px;text-decoration:none;cursor:pointer}
+.briefing a:hover,.briefing button:hover,#intro a:hover{background:#596641}
+#intro{position:fixed;inset:0;display:grid;place-content:center;justify-items:center;gap:12px;background:#000}
+#intro video{width:min(100vw,1024px);max-height:82dvh}
+#menu-back{position:fixed;bottom:12%;right:5%;color:#f4e6c2;background:#151a12;border:1px solid #b29b60;padding:9px 22px;font:16px Georgia,serif;cursor:pointer}
+.menu-links{position:fixed;right:12px;bottom:12px;display:flex;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.menu-links button,.menu-links a{padding:8px 10px;color:#f4e6c2;background:#17241d;border:1px solid #b29b60;border-radius:3px;font:13px Georgia,serif;text-decoration:none;cursor:pointer}
+#menu-status{bottom:56px}
+[hidden]{display:none!important}

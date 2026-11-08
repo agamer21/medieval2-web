@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {HASTINGS_MODELS, prepareHastings, hastingsLesson} from './hastings.js';
 import {OrbitControls} from '../vendor/three/OrbitControls.js';
 import {createBattle,stepBattle,select,command,rally,TYPES,living,fighting} from './battle-sim.js';
 import {loadLocalBattleAssets} from './battle-assets.js';
@@ -32,7 +33,23 @@ mesh(new THREE.BoxGeometry(26,7,3),stoneMat,-8,3.5,-73);
 for(const x of [-23,7]){mesh(new THREE.CylinderGeometry(3,3.8,13,8),stoneMat,x,6.5,-73).castShadow=true;mesh(new THREE.ConeGeometry(4,5,8),materials.red,x,15,-73);}
 const boundary=new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-47,.03,-43),new THREE.Vector3(47,.03,-43),new THREE.Vector3(47,.03,43),new THREE.Vector3(-47,.03,43)]),new THREE.LineBasicMaterial({color:'#e0d6a3',transparent:true,opacity:.35}));scene.add(boundary);
 const ray=new THREE.Raycaster(),pointer=new THREE.Vector2(),dummy=new THREE.Object3D(),v=new THREE.Vector3();
-let battle=createBattle(),speed=1,elapsed=0,accumulator=0,lastFrame=performance.now(),hudElapsed=0,soundOn=false,audio=null,lastClash=0,lastCharge=0;
+const isHastings = new URLSearchParams(location.search).get('scenario') === 'hastings';
+function newBattle(difficulty) {
+ const state = createBattle(difficulty);
+ return isHastings ? prepareHastings(state) : state;
+}
+let lesson = isHastings ? hastingsLesson() : null;
+let battle=newBattle(),speed=1,elapsed=0,accumulator=0,lastFrame=performance.now(),hudElapsed=0,soundOn=false,audio=null,lastClash=0,lastCharge=0;
+if (isHastings) {
+ document.title = 'Medieval II · Battle of Hastings';
+ document.querySelector('.brand small').textContent = 'BATTLE OF HASTINGS · 1066';
+ document.querySelector('.header-right a').href = 'menu.html';
+ document.querySelector('.header-right a').textContent = '← Main menu';
+ $('objective').textContent = 'Follow the opening lessons';
+ document.querySelector('.army-score.friendly span').textContent = 'Normans';
+ document.querySelector('.army-score.enemy span').textContent = 'Saxons';
+ message('Begin the opening tutorial when ready.');
+}
 const views=[],projectiles=[],hitBoxes=[],keys=new Set();
 function instanced(geometry,material,count=24){const m=new THREE.InstancedMesh(geometry,material,count);m.castShadow=true;m.receiveShadow=true;m.frustumCulled=false;scene.add(m);return m;}
 function makeLabel(){const c=document.createElement('canvas');c.width=512;c.height=112;const texture=new THREE.CanvasTexture(c);texture.colorSpace=THREE.SRGBColorSpace;const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:false,transparent:true}));sprite.scale.set(12,2.625,1);scene.add(sprite);return {c,texture,sprite,text:''};}
@@ -52,7 +69,7 @@ createViews();
 let originalBattleModels=false;
 async function loadOriginalBattleModels(){
  try{
-  document.querySelector('header .prototype').textContent='CHECKING LOCAL MODELS…';const assets=await loadLocalBattleAssets(renderer);if(!assets){document.querySelector('header .prototype').textContent='PLAYABLE PROTOTYPE';return;}let loaded=0;
+  document.querySelector('header .prototype').textContent='CHECKING LOCAL MODELS…';const assets=await loadLocalBattleAssets(renderer,isHastings?HASTINGS_MODELS:undefined);if(!assets){document.querySelector('header .prototype').textContent='PLAYABLE PROTOTYPE';return;}let loaded=0;
   for(const s of battle.squads){const asset=assets.bySquad.get(s.id);if(!asset)continue;const view=views[s.id],root=new THREE.Group(),instances=[],horse=s.type==='horse',height=asset.height||1,scale=(horse?2.35:1.8)/height,spacingX=horse?1.85:1.4,spacingZ=horse?2.2:1.7;
    for(const part of asset.parts){const mesh=new THREE.InstancedMesh(part.geometry,part.material,24);mesh.name=`original/${s.name}/${part.name}`;mesh.castShadow=true;mesh.receiveShadow=true;mesh.frustumCulled=false;for(let i=0;i<24;i++){const x=(i%6-2.5)*spacingX,z=(Math.floor(i/6)-1.5)*spacingZ;dummy.position.set(x,-asset.minimumY*scale,z);dummy.rotation.set(0,0,0);dummy.scale.setScalar(scale);dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);}mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();root.add(mesh);instances.push(mesh);}
    root.position.set(s.x,0,s.z);root.rotation.y=s.angle;scene.add(root);view.originalRoot=root;view.originalMeshes=instances;for(const part of Object.values(view.parts))part.visible=false;loaded++;
@@ -92,6 +109,22 @@ function pose(t){
  }
 }
 const marker=new THREE.Mesh(new THREE.RingGeometry(1.1,1.25,32),new THREE.MeshBasicMaterial({color:'#f1d38f',transparent:true,opacity:.9,side:THREE.DoubleSide}));marker.rotation.x=-Math.PI/2;marker.visible=false;scene.add(marker);let markerLife=0;
+const guide = marker.clone();
+guide.material = marker.material.clone();
+guide.scale.setScalar(2);
+scene.add(guide);
+function showLesson() {
+ $('hastings-lesson').hidden = !battle.training;
+ guide.visible = false;
+ if (!battle.training) return;
+ const {title, text, point} = lesson.current;
+ $('lesson-title').textContent = title;
+ $('lesson-text').textContent = text;
+ if (point) {
+  guide.position.set(point.x, .08, point.z);
+  guide.visible = true;
+ }
+}
 function message(text){$('message').textContent=text;}
 function audioStart(){if(!audio)audio=new (window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume();}
 function tone(freq,duration=.15,volume=.045,kind='triangle'){if(!soundOn||!audio)return;const osc=audio.createOscillator(),gain=audio.createGain();osc.type=kind;osc.frequency.setValueAtTime(freq,audio.currentTime);osc.frequency.exponentialRampToValueAtTime(freq*.65,audio.currentTime+duration);gain.gain.setValueAtTime(volume,audio.currentTime);gain.gain.exponentialRampToValueAtTime(.0001,audio.currentTime+duration);osc.connect(gain).connect(audio.destination);osc.start();osc.stop(audio.currentTime+duration);}
@@ -113,13 +146,28 @@ function hud(){
  for(let side=0;side<2;side++)$(side?'enemy-count':'friendly-count').textContent=battle.squads.filter(s=>s.side===side&&fighting(s)).reduce((sum,s)=>sum+s.count,0);
  const sec=Math.floor(battle.time);$('timer').textContent=`${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;$('phase').textContent=battle.status==='deployment'?'DEPLOYMENT':battle.status==='paused'?'PAUSED':battle.status==='ended'?'BATTLE ENDED':'BATTLE IN PROGRESS';
  $('pause').textContent=battle.status==='deployment'?'Begin battle':battle.status==='running'?'Pause battle':'Resume battle';$('pause').disabled=battle.status==='ended';
+ if (battle.training && battle.status === 'deployment') $('pause').textContent = 'Begin tutorial';
+ if (battle.training && lesson.complete) $('pause').textContent = 'Join battle';
  for(const card of cards){const s=battle.squads[Number(card.dataset.unit)];card.classList.toggle('selected',battle.selected.includes(s.id));card.setAttribute('aria-pressed',String(battle.selected.includes(s.id)));card.classList.toggle('disabled',!fighting(s));card.querySelector('.count').textContent=`${s.count} / 24`;card.querySelector('.unit-status').textContent=!living(s)?'Lost':s.routing?'Routing':s.engaged?'Fighting':s.order.kind==='attack'?'Attacking':s.moving?'Moving':'Holding';card.querySelector('.morale-value').textContent=`Morale ${Math.round(s.morale)}`;for(const [name,value] of [['health',s.hp/s.maxHp*100],['morale',s.morale],['stamina',s.stamina]])card.querySelector(`.${name} i`).style.width=`${value}%`;}
  const selected=battle.squads.filter(s=>battle.selected.includes(s.id)&&fighting(s)),running=selected.length>0&&selected.every(s=>s.running);$('run').textContent=`Run: ${running?'on':'off'}`;$('run').setAttribute('aria-pressed',String(running));$('run').disabled=$('hold').disabled=!selected.length||battle.status==='ended';
  const cooldown=Math.max(0,Math.ceil(30-(battle.time-battle.rallyAt)));$('rally').textContent=cooldown?`Rally (${cooldown}s)`:'Rally troops';$('rally').disabled=battle.status!=='running'||cooldown>0;
 }
 function finish(){const win=battle.winner===0;$('result').hidden=false;$('result-title').textContent=battle.winner===null?'Draw':win?'Victory':'Defeat';$('result-kicker').textContent=win?'THE FIELD IS YOURS':'THE BANNERS FALL';$('result-description').textContent=win?'The red banners have broken. Your army holds the crossing.':'Your army has broken. Keep infantry together and protect your archers on the next attempt.';tone(win?520:150,.8,.06);hud();}
-function reset(){battle=createBattle($('difficulty').value);accumulator=0;keys.clear();$('result').hidden=true;marker.visible=false;for(const p of projectiles){scene.remove(p.line);p.line.geometry.dispose();p.line.material.dispose();}projectiles.length=0;message('Place your regiments on your half of the field, then begin the battle.');frameBattle();hud();}
-function pause(){if(battle.status==='ended')return;const old=battle.status;battle.status=old==='running'?'paused':'running';accumulator=0;message(battle.status==='paused'?'Battle paused. You can still give orders.':old==='deployment'?'The red banners advance. Hold the crossing!':'Battle resumed.');tone(330,.25);hud();}
+function reset(){battle=newBattle($('difficulty').value);lesson=isHastings?hastingsLesson():null;accumulator=0;keys.clear();$('result').hidden=true;marker.visible=false;for(const p of projectiles){scene.remove(p.line);p.line.geometry.dispose();p.line.material.dispose();}projectiles.length=0;message(isHastings?'Begin the opening tutorial when ready.':'Place your regiments on your half of the field, then begin the battle.');frameBattle();showLesson();hud();}
+function pause(){
+ if(battle.status==='ended')return;
+ if (battle.training && lesson.complete) {
+  battle.training = false;
+  battle.status = 'running';
+  $('objective').textContent = 'Break the Saxon line';
+  message('The Saxons advance. Use the commands you learned.');
+  showLesson();
+ } else {
+  const old=battle.status;battle.status=old==='running'?'paused':'running';
+  message(battle.status==='paused'?'Battle paused. You can still give orders.':battle.training?'Follow the tutorial instructions.':old==='deployment'?'The red banners advance. Hold the crossing!':'Battle resumed.');
+ }
+ accumulator=0;tone(330,.25);hud();
+}
 $('pause').onclick=pause;$('restart').onclick=reset;$('play-again').onclick=reset;$('difficulty').onchange=()=>{reset();message('Challenge changed. A fresh battle is ready.');};
 $('speed').onclick=()=>{speed=speed===1?2:speed===2?.5:1;$('speed').textContent=`${speed}× speed`;};
 $('sound').onclick=()=>{soundOn=!soundOn;if(soundOn){audioStart();tone(440,.15);}$('sound').textContent=`Sound ${soundOn?'on':'off'}`;$('sound').setAttribute('aria-pressed',String(soundOn));};
@@ -158,8 +206,10 @@ function animate(now){
  if(dx||dz){const oldX=controls.target.x,oldZ=controls.target.z;controls.target.x=THREE.MathUtils.clamp(oldX+dx*pan,-48,48);controls.target.z=THREE.MathUtils.clamp(oldZ+dz*pan,-43,43);camera.position.x+=controls.target.x-oldX;camera.position.z+=controls.target.z-oldZ;}
  for(let i=projectiles.length-1;i>=0;i--){const p=projectiles[i];if(battle.status==='running')p.life+=dt*speed;const t=Math.min(1,p.life/.7);v.lerpVectors(p.start,p.end,t);v.y+=Math.sin(t*Math.PI)*10;const end=v.clone().add(p.end.clone().sub(p.start).normalize().multiplyScalar(1.5));p.line.geometry.setFromPoints([v.clone(),end]);if(t>=1){scene.remove(p.line);p.line.geometry.dispose();p.line.material.dispose();projectiles.splice(i,1);}}
  if(marker.visible){markerLife-=dt;marker.material.opacity=Math.min(.9,markerLife);marker.scale.setScalar(1+Math.sin(elapsed*6)*.1);if(markerLife<=0)marker.visible=false;}
- pose(battle.time);hudElapsed+=dt;if(hudElapsed>.12){hud();hudElapsed=0;}controls.update();renderer.render(scene,camera);
+ pose(battle.time);hudElapsed+=dt;if(hudElapsed>.12){hud();hudElapsed=0;}controls.update();
+ if (battle.training && battle.status === 'running' && lesson.update(battle, camera.position)) showLesson();
+ renderer.render(scene,camera);
 }
 // Read-only inspection hooks for browser verification; no artificial victory button.
 window.battleGame={get state(){return battle;},get originalModelsLoaded(){return originalBattleModels;},renderer,camera,controls,screenPosition(id){const s=battle.squads[id],r=canvas.getBoundingClientRect();const point=new THREE.Vector3(s.x,1,s.z).project(camera);return {x:r.left+(point.x+1)*r.width/2,y:r.top+(1-point.y)*r.height/2};},worldPosition(x,z){const r=canvas.getBoundingClientRect(),p=new THREE.Vector3(x,0,z).project(camera);return {x:r.left+(p.x+1)*r.width/2,y:r.top+(1-p.y)*r.height/2};},get audioState(){return audio?.state??'off';}};
-hud();requestAnimationFrame(animate);
+showLesson();hud();requestAnimationFrame(animate);

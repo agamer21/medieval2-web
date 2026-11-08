@@ -3,6 +3,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 import argparse
+import errno
 import json
 import os
 import re
@@ -11,7 +12,8 @@ APP = Path(__file__).resolve().parents[1]
 DEFAULT_ASSETS = APP.parents[1] / 'work/medieval2/private-assets'
 DEFAULT_GAME = Path(r'C:\Program Files (x86)\Steam\steamapps\common\Medieval II Total War')
 LOOSE_FILES = ('data/animations/pack.idx', 'data/animations/pack.dat',
-               'data/animations/skeletons.idx', 'data/animations/skeletons.dat')
+               'data/animations/skeletons.idx', 'data/animations/skeletons.dat',
+               'data/world/maps/battle/norman_prologue/battle_of_hastings/loading_screen.tga')
 MAX_RANGE = 64 * 1024 * 1024
 
 def valid_game_root(path):
@@ -94,9 +96,15 @@ if __name__ == '__main__':
     parser.add_argument('--open', action='store_true')
     args=parser.parse_args(); Handler.asset_root=args.assets.resolve();Handler.game_root=detect_game_root(args.game)
     Handler.game_files={name.lower():Handler.game_root.joinpath(*name.split('/')) for name in LOOSE_FILES} if Handler.game_root else {}
-    server=ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
-    print(f'Medieval II local port: http://127.0.0.1:{args.port} ({"game detected" if Handler.game_root else "game not found"})', flush=True)
+    try:
+        server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
+    except OSError as error:
+        if not args.open or error.errno not in (errno.EADDRINUSE, 10048):
+            raise
+        server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    port = server.server_port
+    print(f'Medieval II local port: http://127.0.0.1:{port} ({"game detected" if Handler.game_root else "game not found"})', flush=True)
     if args.open:
         import webbrowser
-        webbrowser.open(f'http://127.0.0.1:{args.port}/menu.html')
+        webbrowser.open(f'http://127.0.0.1:{port}/menu.html')
     server.serve_forever()

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Medieval II · Norman Prologue</title>
+<link rel="stylesheet" href="menu.css">
+<main class="prologue">
+  <canvas id="prologue-art" aria-label="Original Hastings loading artwork"></canvas>
+  <section class="briefing">
+    <p>1066 · NORMAN PROLOGUE</p>
+    <h1>The Battle of Hastings</h1>
+    <p>Learn to command Rufus and his troops before joining the battle.</p>
+    <div class="briefing-actions">
+      <button id="watch-intro" hidden>Watch original intro</button>
+      <a href="./?scenario=hastings">Start tutorial</a>
+      <a href="menu.html">Back to menu</a>
+    </div>
+    <p id="prologue-status" role="status"></p>
+  </section>
+  <div id="intro" hidden>
+    <video id="intro-video" controls playsinline preload="none" aria-label="Original Norman prologue film"></video>
+    <a href="./?scenario=hastings">Skip to tutorial</a>
+  </div>
+</main>
+<script type="module" src="src/prologue.js"></script>
+</html>

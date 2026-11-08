@@ -27,6 +27,17 @@ function advance(s,t,dt,speed){const d=distance(s,t);if(d<.12)return false;const
 export function stepBattle(b,dt){
  if(b.status!=='running'||!Number.isFinite(dt)||dt<=0)return;
  dt=Math.min(dt,.1);b.time+=dt;b.tick++;b.events=[];const hits=[];
+ if (b.training) {
+  for (const squad of b.squads) {
+   if (squad.side !== 0 || squad.order.kind !== 'move') continue;
+   squad.moving = advance(squad, squad.order, dt, TYPES[squad.type].speed * (squad.running ? 1.55 : 1));
+   if (distance(squad, squad.order) < .2) {
+    squad.moving = false;
+    squad.order = {kind:'hold'};
+   }
+  }
+  return;
+ }
  for(const s of b.squads){
   s.engaged=false;s.moving=false;if(!living(s))continue;const startX=s.x,startZ=s.z;
   if(s.routing){s.moving=advance(s,{x:s.x,z:s.side?-53:53},dt,6);if(Math.abs(s.z)>49)s.escaped=true;continue;}

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {parseMesh} from './mesh.js';
 import {decodeTexture,textureAtlas} from './texture.js';
-import {openRemoteGameFiles} from './pack.js';
+import {installedGame} from './installed-game.js';
 import {catalogueFromModeldb} from './native-files.js';
 
 const FORMATIONS=[
@@ -27,11 +27,12 @@ async function prepare(renderer,reader,entry){
  const parts=renderableGroups(model).map(group=>({name:group.name,...geometryFor(model,group),material}));
  return {model,parts,height:model.bounds.max[1]-model.bounds.min[1],minimumY:model.bounds.min[1]};
 }
-export async function loadLocalBattleAssets(renderer){
-  const response=await fetch('./api/game',{cache:'no-store'});if(!response.ok)return null;const manifest=await response.json();if(!manifest.available)return null;
- const reader=await openRemoteGameFiles(manifest),db=new TextDecoder('windows-1252').decode(await reader.read('data/unit_models/battle_models.modeldb')),entries=catalogueFromModeldb(db),cache=new Map(),bySquad=new Map(),selected=[];
- for(let id=0;id<FORMATIONS.length;id++){
-  const [name,faction]=FORMATIONS[id],entry=entries.find(item=>item.modeldbName===name&&item.faction===faction);if(!entry)continue;
+export async function loadLocalBattleAssets(renderer, formations=FORMATIONS){
+ const reader=await installedGame();
+ if (!reader) return null;
+ const db=new TextDecoder('windows-1252').decode(await reader.read('data/unit_models/battle_models.modeldb')),entries=catalogueFromModeldb(db),cache=new Map(),bySquad=new Map(),selected=[];
+ for(let id=0;id<formations.length;id++){
+  const [name,faction]=formations[id],entry=entries.find(item=>item.modeldbName===name&&item.faction===faction);if(!entry)continue;
   const key=`${entry.modeldbName}|${entry.faction}`;if(!cache.has(key))cache.set(key,prepare(renderer,reader,entry));selected.push({id,key});
  }
  await Promise.all([...cache].map(async([key,promise])=>cache.set(key,await promise)));

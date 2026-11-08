@@ -8,7 +8,13 @@ The preserved [original-asset viewer](https://agamer21.github.io/medieval2-web/l
 
 ## Open it on this PC
 
-Run `START.cmd`. It starts the loopback server and opens the local main menu at <http://127.0.0.1:8872/menu.html>. Choose **Single Player → Custom Battle** to play at <http://127.0.0.1:8872/>. The asset viewer is at <http://127.0.0.1:8872/lab.html>.
+Open the [browser menu](https://agamer21.github.io/medieval2-web/menu.html) and choose **Single Player → Prologue**. You can play the opening drills immediately. In a browser that supports directory access, **Use original assets** connects your Steam installation with read permission. The browser remembers the directory and reads the game art and troop models locally when permission is available.
+
+Run `START.cmd` to open the local main menu. Choose **Single Player → Prologue** for the Battle of Hastings. The briefing uses the original loading artwork. **Watch original intro** plays a private browser copy of the installed movie when FFmpeg is available. **Start tutorial** goes directly to the first lesson.
+
+The guided opening covers selecting and moving Rufus, moving the camera, selecting the Mailed Knights and giving a run order. **Join battle** starts a scaled encounter on the existing prototype battlefield. The Norman and Saxon troops use their matching original meshes and faction textures. Later Hastings lessons, the original battlefield terrain and the following campaign sequence remain open.
+
+**Single Player → Custom Battle** opens the original browser prototype. The asset viewer is available at `lab.html` on the same local server. The launcher normally uses port 8872 and picks a free port when 8872 is already in use.
 
 The local server reads PACK files through bounded byte-range requests and only serves game assets from loopback. The viewer auto-loads 1,980 searchable model/faction entries with LOD selection. It uses original idle/walk/run clips for Spear Militia. The main and Single Player screens use the actual main-menu artwork and English string table; the other screens are still being ported. The local launcher needs no file or folder picker.
 
